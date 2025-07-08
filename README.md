@@ -23,9 +23,4 @@
 - `Procfile` - Specifies how to run the app on Render/Heroku  
 - `.github/workflows` - CI/CD pipeline configuration  
 
----
 
-**Pro Tip:** Use this structure to:
-1. Quickly onboard collaborators
-2. Maintain clean separation of concerns
-3. Easily expand features later
