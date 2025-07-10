@@ -24,3 +24,6 @@
 - `.github/workflows` - CI/CD pipeline configuration  
 
 
+
+# WhatsApp Job Bot
+AI-powered job matching via WhatsApp
