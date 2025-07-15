@@ -1,28 +1,36 @@
 import requests
 import os
+from dotenv import load_dotenv
 
-ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
-ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
+load_dotenv()
 
-def search_jobs(skills, location="kenya", max_results=5):
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
+
+def search_jobs(skills, location="remote", max_results=5):
+    if not RAPIDAPI_KEY:
+        raise EnvironmentError("RAPIDAPI_KEY is missing in environment variables.")
+
+    url = "https://job-search-api2.p.rapidapi.com/active-ats-expired"
     query = " ".join(skills)
 
-    url = f"https://api.adzuna.com/v1/api/jobs/ke/search/1"
-
     params = {
-        "app_id": ADZUNA_APP_ID,
-        "app_key": ADZUNA_APP_KEY,
-        "results_per_page": max_results,
-        "what": query,
-        "where": location,
-        "content-type": "application/json"
+        "query": query,
+        "num_pages": 1,
+        "page": 1,
+        "remote_jobs_only": "true",  # Could also try True without quotes
+        "location": location
     }
 
-    response = requests.get(url, params=params)
+    headers = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host":  "job-search-api2.p.rapidapi.com"
+    }
+
+    response = requests.get(url, headers=headers, params=params)
 
     if response.status_code == 200:
-        jobs = response.json().get("results", [])
-        return jobs
+        jobs = response.json().get("data", [])
+        return jobs[:max_results]
     else:
-        print("❌ Adzuna API error:", response.status_code)
+        print("❌ Failed to fetch jobs:", response.status_code, response.text)
         return []

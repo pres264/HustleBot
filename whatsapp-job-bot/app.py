@@ -3,42 +3,42 @@ from twilio.twiml.messaging_response import MessagingResponse
 import os
 import requests
 from werkzeug.utils import secure_filename
-from cv_parser import extract_text_from_cv
-from job_api import search_jobs
+from cv_parser import extract_text_from_cv, extract_keywords
+from scraper import scrape_all_jobs
+from cv_model import cvUploads, session
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
 
-# 🔍 Log every incoming request method and path
 @app.before_request
 def log_request():
     print(f"👉 {request.method} {request.path}")
 
-# ✅ Simple homepage to confirm Flask is running
 @app.route('/', methods=['GET'])
 def home():
     return "✅ WhatsApp job bot is running!"
 
-# 📩 WhatsApp webhook
 @app.route('/webhook', methods=['POST'])
 def whatsapp_reply():
     incoming_msg = request.values.get('Body', '').lower()
-    
     media_url = request.values.get('MediaUrl0', None)
     media_type = request.values.get('MediaContentType0', None)
 
     print(f"Incoming message: {incoming_msg}")
-    print(f"Media: {media_url}({media_type})")
+    print(f"Media: {media_url} ({media_type})")
 
     resp = MessagingResponse()
     msg = resp.message()
 
     if 'hello' in incoming_msg:
         msg.body("👋 Hi! Please upload your CV (PDF or DOCX) to get tailored job matches.")
-    elif media_url and media_type in ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
-        # Get the file from Twilio's Media URL
+    
+    elif media_url and media_type in [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]:
         twilio_auth = (os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
         response = requests.get(media_url, auth=twilio_auth)
 
@@ -51,47 +51,67 @@ def whatsapp_reply():
                 f.write(response.content)
 
             print(f"✅ CV saved to {filepath}")
-            msg.body("📄 CV received! Analyzing now...")
+            msg.body("📄 CV received! Hold on while we match you with jobs...")
 
-            #extract text and key words from the cv
-            text = extract_text_from_cv(filepath)
-            print("🧠 Extracted CV Text Preview:")
-            print(text[:1000]) # Preview first 1000 characters
-            keywords = extract_keywords(text, top_n=7)
-            print
+            # Save meta data to database
+            cv_record = CVUpload(filename=filename, filepath=filepath)
+            session.add(cv_record)
+            session.commit()
+            print("💾 CV metadata saved to database.")
+            
+            try:
+                text = extract_text_from_cv(filepath)
+                print("🧠 Extracted CV Text Preview:")
+                print(text[:1000])
 
-            msg.body("📝 CV analysis complete! We will match you with suitable job opportunities shortly based on your qualifications."  )
+                keywords = extract_keywords(text, top_n=7)
+                print("🔑 Extracted Keywords:", keywords)
 
-            # 🔎 Search for matching jobs using Adzuna
-            job_results = search_jobs(keywords, location="kenya")
+                # Let user know analysis is starting
+                followup = MessagingResponse()
+                followup.message("🔍 Analyzing your CV and finding job matches...")
 
-            # 💬 Format the response
-            if job_results:
-                reply = "📌 Here are some jobs matching your CV:\n\n"
-                for job in job_results:
-                    title = job.get("title", "No title")
-                    company = job.get("company", {}).get("display_name", "Unknown")
-                    location = job.get("location", {}).get("display_name", "Unknown")
-                    url = job.get("redirect_url", "#")
+                # Perform job scraping
+                job_results = scrape_all_jobs(keywords)
+                print("🔍 Scraped Job Results:", job_results)
 
-                    reply += f"🔹 *{title}*\nCompany: {company}\nLocation: {location}\nLink: {url}\n\n"
-            else:
-                reply = "😕 Couldn't find any job matches right now. Try again later."
+                # Format and send jobs to user
+                if job_results:
+                    job_list = "📌 Here are some jobs matching your CV:\n\n"
+                    for job in job_results[:3]:  # Send top 3
+                        title = job.get("title", "No title")
 
-            msg.body(reply)
-            print("📬 Sending job matches to user...")
+                        # Fix company and location display names
+                        company = job.get("company", "Unknown")
+                        if isinstance(company, dict):
+                            company = company.get("display_name", "Unknown")
 
-            # Optionally, you can delete the file after processing
-            #os.remove(filepath)
+                        location = job.get("location", "Unknown")
+                        if isinstance(location, dict):
+                            location = location.get("display_name", "Unknown")
+
+                        # Get URL (ensure it's present)
+                        url = job.get("url") or job.get("redirect_url") or "#"
+
+
+                        job_list += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
+                    
+                    followup.message("📌 Here are some jobs matching your CV:\n\n" + job_list)
+                else:
+                    followup.message("😕 Sorry, we couldn't find any job matches for now. Try again later!")
+
+                return str(followup)
+
+            except Exception as e:
+                print("❌ Error analyzing CV:", str(e))
+                msg.body("⚠️ Sorry, there was an error processing your CV.")
         else:
             msg.body("❌ Failed to download your CV. Please try again.")
-
+    
     else:
         msg.body("Send 'hello' to get started or upload your CV directly.")
-    
+
     return str(resp)
 
-# 🚀 Start the server
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
