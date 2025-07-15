@@ -55,7 +55,7 @@ def scrape_greenhouse_jobs():
             results.append({
                 "title": title,
                 "company": {"display_name": "Zipline (Greenhouse)"},
-                "location": {"display_name": "Kenya"},  # Or extract location from parent tag
+                "location": {"display_name": "Kenya"},  # You can improve this if real location is available
                 "url": link
             })
     except Exception as e:
@@ -63,16 +63,22 @@ def scrape_greenhouse_jobs():
     return results
 
 def scrape_all_jobs(keywords):
-    # Combine jobs from all platforms
-    print("🔍 Scraping BrighterMonday...")
-    bm_jobs = scrape_brightermonday_jobs(keywords)
+    all_jobs = scrape_brightermonday_jobs(keywords) + \
+               scrape_opportunitiesforyoungkenyans() + \
+               scrape_greenhouse_jobs()
 
-    print("🔍 Scraping OpportunitiesForYoungKenyans...")
-    ofyk_jobs = scrape_opportunitiesforyoungkenyans()
+    # Filter based on keywords in job title
+    filtered = []
+    for job in all_jobs:
+        title = job.get("title", "").lower()
+        if any(k.lower() in title for k in keywords):
+            filtered.append(job)
 
-    print("🔍 Scraping Greenhouse...")
-    gh_jobs = scrape_greenhouse_jobs()
+    print(f"✅ Filtered jobs: {len(filtered)} out of {len(all_jobs)}")
 
-    all_jobs = bm_jobs + ofyk_jobs + gh_jobs
-    print(f"✅ Total jobs collected: {len(all_jobs)}")
-    return all_jobs
+    # Return filtered if at least 3 results, otherwise return top 10 unfiltered
+    if len(filtered) >= 3:
+        return filtered[:10]
+    else:
+        print("⚠️ Not enough matches. Returning top 10 unfiltered jobs instead.")
+        return all_jobs[:10]

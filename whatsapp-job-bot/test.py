@@ -1,20 +1,11 @@
-from scraper import scrape_all_jobs
+from cv_model import CVUpload, session
 
-print("🚀 Starting job scrape test...")
+records = session.query(CVUpload).all()
 
-results = scrape_all_jobs(["IT"])
-
-print(f"🔍 Total jobs found: {len(results)}")
-for i, job in enumerate(results[:3]):
-    print(f"\n🔹 Job {i+1}:")
-    print(job)
-    print("💡 Starting scrape_brightermonday_jobs...")
-    print("📄 Page Content Preview:")
-    print(response.text[:500])
-try:
-    results = scrape_all_jobs(["IT"])
-    print(f"✅ Total jobs found: {len(results)}")
-except Exception as e:
-    print("❌ Scraping failed:", e)
-
-
+print("📄 Uploaded CVs:")
+for record in records:
+    print(f"🆔 ID: {record.id}")
+    print(f"📁 Filename: {record.filename}")
+    print(f"📍 Path: {record.filepath}")
+    print(f"⏰ Uploaded at: {record.upload_time}")
+    print("—" * 40)

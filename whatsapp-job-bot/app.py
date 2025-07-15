@@ -5,11 +5,10 @@ import requests
 from werkzeug.utils import secure_filename
 from cv_parser import extract_text_from_cv, extract_keywords
 from scraper import scrape_all_jobs
-from cv_model import cvUploads, session
+from cv_model import CVUpload, session
 from dotenv import load_dotenv
 
 load_dotenv()
-
 app = Flask(__name__)
 
 @app.before_request
@@ -33,81 +32,81 @@ def whatsapp_reply():
     msg = resp.message()
 
     if 'hello' in incoming_msg:
-        msg.body("👋 Hi! Please upload your CV (PDF or DOCX) to get tailored job matches.")
-    
-    elif media_url and media_type in [
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ]:
+        msg.body("👋 Hi! Please upload your CV (PDF)to get tailored job matches.")
+
+    elif media_url and media_type in ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
         twilio_auth = (os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
         response = requests.get(media_url, auth=twilio_auth)
 
         if response.status_code == 200:
-            filename = secure_filename(f"user_cv.{media_type.split('/')[-1]}")
-            filepath = os.path.join("cv_uploads", filename)
+            ext = media_type.split('/')[-1]
+            base_name = "user_cv"
+            counter = 0
             os.makedirs("cv_uploads", exist_ok=True)
+
+            while True:
+                filename = f"{base_name}_{counter}.{ext}" if counter else f"{base_name}.{ext}"
+                filepath = os.path.join("cv_uploads", secure_filename(filename))
+                if not os.path.exists(filepath):
+                    break
+                counter += 1
 
             with open(filepath, "wb") as f:
                 f.write(response.content)
 
             print(f"✅ CV saved to {filepath}")
-            msg.body("📄 CV received! Hold on while we match you with jobs...")
+            job_text = "📄 CV received! Hold on while we match you with jobs...\n"
+            job_text += "🔍 Analyzing your CV and finding job matches...\n\n"
 
-            # Save meta data to database
+            # Save metadata
             cv_record = CVUpload(filename=filename, filepath=filepath)
             session.add(cv_record)
             session.commit()
-            print("💾 CV metadata saved to database.")
-            
+
             try:
                 text = extract_text_from_cv(filepath)
                 print("🧠 Extracted CV Text Preview:")
-                print(text[:1000])
+                print(text[:500])  # Preview only
 
                 keywords = extract_keywords(text, top_n=7)
                 print("🔑 Extracted Keywords:", keywords)
 
-                # Let user know analysis is starting
-                followup = MessagingResponse()
-                followup.message("🔍 Analyzing your CV and finding job matches...")
-
-                # Perform job scraping
+                # Scrape jobs
+                print("🔍 Scraping jobs...")
                 job_results = scrape_all_jobs(keywords)
-                print("🔍 Scraped Job Results:", job_results)
+                print("📊 Scraped Job Results:", job_results)
 
-                # Format and send jobs to user
                 if job_results:
-                    job_list = "📌 Here are some jobs matching your CV:\n\n"
-                    for job in job_results[:3]:  # Send top 3
+                    job_text += "📌 Here are some jobs matching your CV:\n\n"
+                    for job in job_results[:10]:
                         title = job.get("title", "No title")
+                        company = job.get("company", {}).get("display_name", "Unknown")
+                        location = job.get("location", {}).get("display_name", "Unknown")
+                        url = job.get("url") or job.get("redirect_url") or "#"
+                        job_text += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
+                
 
-                        # Fix company and location display names
-                        company = job.get("company", "Unknown")
                         if isinstance(company, dict):
                             company = company.get("display_name", "Unknown")
-
-                        location = job.get("location", "Unknown")
                         if isinstance(location, dict):
                             location = location.get("display_name", "Unknown")
 
-                        # Get URL (ensure it's present)
-                        url = job.get("url") or job.get("redirect_url") or "#"
+                        job_text += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
 
-
-                        job_list += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
-                    
-                    followup.message("📌 Here are some jobs matching your CV:\n\n" + job_list)
+                   
                 else:
-                    followup.message("😕 Sorry, we couldn't find any job matches for now. Try again later!")
+                    msg.body("😕 Sorry, no job matches found right now. Try again later!")
 
-                return str(followup)
+                msg.body(job_text)
+                return str(resp)
 
             except Exception as e:
-                print("❌ Error analyzing CV:", str(e))
-                msg.body("⚠️ Sorry, there was an error processing your CV.")
+                print("❌ Error during analysis or scraping:", str(e))
+                msg.body("⚠️ Error analyzing your CV. Please try again later.")
+
         else:
             msg.body("❌ Failed to download your CV. Please try again.")
-    
+
     else:
         msg.body("Send 'hello' to get started or upload your CV directly.")
 
