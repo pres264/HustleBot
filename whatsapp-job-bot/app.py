@@ -32,31 +32,24 @@ def whatsapp_reply():
     msg = resp.message()
 
     if 'hello' in incoming_msg:
-        msg.body("👋 Hi! Please upload your CV (PDF)to get tailored job matches.")
+        msg.body("👋 Hi! Please upload your CV (PDF or DOCX) to get tailored job matches.")
+        return str(resp)
 
-    elif media_url and media_type in ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
+    if media_url and media_type in ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
         twilio_auth = (os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
         response = requests.get(media_url, auth=twilio_auth)
 
         if response.status_code == 200:
             ext = media_type.split('/')[-1]
-            base_name = "user_cv"
-            counter = 0
             os.makedirs("cv_uploads", exist_ok=True)
-
-            while True:
-                filename = f"{base_name}_{counter}.{ext}" if counter else f"{base_name}.{ext}"
-                filepath = os.path.join("cv_uploads", secure_filename(filename))
-                if not os.path.exists(filepath):
-                    break
-                counter += 1
+            filename = secure_filename(f"user_cv.{ext}")
+            filepath = os.path.join("cv_uploads", filename)
 
             with open(filepath, "wb") as f:
                 f.write(response.content)
 
             print(f"✅ CV saved to {filepath}")
-            job_text = "📄 CV received! Hold on while we match you with jobs...\n"
-            job_text += "🔍 Analyzing your CV and finding job matches...\n\n"
+            msg.body("📄 CV received! Analyzing now...")
 
             # Save metadata
             cv_record = CVUpload(filename=filename, filepath=filepath)
@@ -65,51 +58,36 @@ def whatsapp_reply():
 
             try:
                 text = extract_text_from_cv(filepath)
-                print("🧠 Extracted CV Text Preview:")
-                print(text[:500])  # Preview only
-
+                print("🧠 Extracted CV text:", text[:500])
                 keywords = extract_keywords(text, top_n=7)
                 print("🔑 Extracted Keywords:", keywords)
 
-                # Scrape jobs
-                print("🔍 Scraping jobs...")
-                job_results = scrape_all_jobs(keywords)
-                print("📊 Scraped Job Results:", job_results)
+                jobs = scrape_all_jobs(keywords)
+                print(f"📊 Scraped Job Results: {len(jobs)}")
 
-                if job_results:
-                    job_text += "📌 Here are some jobs matching your CV:\n\n"
-                    for job in job_results[:10]:
+                if jobs:
+                    job_list = "📌 Here are some jobs matching your CV:\n\n"
+                    for job in jobs[:5]:
                         title = job.get("title", "No title")
                         company = job.get("company", {}).get("display_name", "Unknown")
                         location = job.get("location", {}).get("display_name", "Unknown")
-                        url = job.get("url") or job.get("redirect_url") or "#"
-                        job_text += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
-                
-
-                        if isinstance(company, dict):
-                            company = company.get("display_name", "Unknown")
-                        if isinstance(location, dict):
-                            location = location.get("display_name", "Unknown")
-
-                        job_text += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
-
-                   
+                        url = job.get("url", "#")
+                        job_list += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
+                    msg.body(job_list)
                 else:
-                    msg.body("😕 Sorry, no job matches found right now. Try again later!")
-
-                msg.body(job_text)
-                return str(resp)
+                    msg.body("😕 No job matches found right now. Try again later.")
 
             except Exception as e:
-                print("❌ Error during analysis or scraping:", str(e))
+                print("❌ Error:", e)
                 msg.body("⚠️ Error analyzing your CV. Please try again later.")
+
+            return str(resp)
 
         else:
             msg.body("❌ Failed to download your CV. Please try again.")
+            return str(resp)
 
-    else:
-        msg.body("Send 'hello' to get started or upload your CV directly.")
-
+    msg.body("Send 'hello' to get started or upload your CV.")
     return str(resp)
 
 if __name__ == '__main__':
