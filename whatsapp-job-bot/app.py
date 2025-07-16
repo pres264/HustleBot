@@ -90,5 +90,6 @@ def whatsapp_reply():
     msg.body("Send 'hello' to get started or upload your CV.")
     return str(resp)
 
+# Corrected main block (fix syntax and indentation)
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
