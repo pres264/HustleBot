@@ -1,5 +1,6 @@
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
+from requests.auth import HTTPBasicAuth
 import os
 import requests
 from werkzeug.utils import secure_filename
@@ -35,10 +36,18 @@ def whatsapp_reply():
         msg.body("👋 Hi! Please upload your CV (PDF or DOCX) to get tailored job matches.")
         return str(resp)
 
-    if media_url and media_type in ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
-        twilio_auth = (os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-        response = requests.get(media_url, auth=twilio_auth)
+    if media_url and media_type in [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]:
+        # Securely authenticate with Twilio
+        twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
 
+        print(f"📡 Downloading from: {media_url}")
+        response = requests.get(media_url, auth=HTTPBasicAuth(twilio_sid, twilio_token))
+
+        print(f"📥 Status Code: {response.status_code}")
         if response.status_code == 200:
             ext = media_type.split('/')[-1]
             os.makedirs("cv_uploads", exist_ok=True)
@@ -51,23 +60,23 @@ def whatsapp_reply():
             print(f"✅ CV saved to {filepath}")
             msg.body("📄 CV received! Analyzing now...")
 
-            # Save metadata
+            # Save metadata to DB
             cv_record = CVUpload(filename=filename, filepath=filepath)
             session.add(cv_record)
             session.commit()
 
             try:
                 text = extract_text_from_cv(filepath)
-                print("🧠 Extracted CV text:", text[:500])
+                print("🧠 Extracted CV text preview:", text[:500])
                 keywords = extract_keywords(text, top_n=7)
                 print("🔑 Extracted Keywords:", keywords)
 
-                jobs = scrape_all_jobs(keywords)
-                print(f"📊 Scraped Job Results: {len(jobs)}")
+                job_results = scrape_all_jobs(keywords)
+                print(f"📊 Scraped Job Results: {len(job_results)}")
 
-                if jobs:
+                if job_results:
                     job_list = "📌 Here are some jobs matching your CV:\n\n"
-                    for job in jobs[:5]:
+                    for job in job_results[:5]:
                         title = job.get("title", "No title")
                         company = job.get("company", {}).get("display_name", "Unknown")
                         location = job.get("location", {}).get("display_name", "Unknown")
@@ -78,12 +87,13 @@ def whatsapp_reply():
                     msg.body("😕 No job matches found right now. Try again later.")
 
             except Exception as e:
-                print("❌ Error:", e)
-                msg.body("⚠️ Error analyzing your CV. Please try again later.")
+                print("❌ Error during analysis or scraping:", str(e))
+                msg.body("⚠️ There was an error analyzing your CV. Please try again later.")
 
             return str(resp)
 
         else:
+            print(f"❌ Download failed: {response.status_code} — {response.text}")
             msg.body("❌ Failed to download your CV. Please try again.")
             return str(resp)
 
