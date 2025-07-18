@@ -1,8 +1,9 @@
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
+from twilio.rest import Client
 from requests.auth import HTTPBasicAuth
 import os
-import requests
+import urllib.parse
 from werkzeug.utils import secure_filename
 from cv_parser import extract_text_from_cv, extract_keywords
 from scraper import scrape_all_jobs
@@ -40,62 +41,62 @@ def whatsapp_reply():
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ]:
-        # Securely authenticate with Twilio
+        # --- Twilio secure media download ---
         twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
         twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
 
-        print(f"📡 Downloading from: {media_url}")
-        response = requests.get(media_url, auth=HTTPBasicAuth(twilio_sid, twilio_token))
-
-        print(f"📥 Status Code: {response.status_code}")
-        if response.status_code == 200:
-            ext = media_type.split('/')[-1]
-            os.makedirs("cv_uploads", exist_ok=True)
-            filename = secure_filename(f"user_cv.{ext}")
-            filepath = os.path.join("cv_uploads", filename)
-
-            with open(filepath, "wb") as f:
-                f.write(response.content)
-
-            print(f"✅ CV saved to {filepath}")
-            msg.body("📄 CV received! Analyzing now...")
-
-            # Save metadata to DB
-            cv_record = CVUpload(filename=filename, filepath=filepath)
-            session.add(cv_record)
-            session.commit()
-
-            try:
-                text = extract_text_from_cv(filepath)
-                print("🧠 Extracted CV text preview:", text[:500])
-                keywords = extract_keywords(text, top_n=7)
-                print("🔑 Extracted Keywords:", keywords)
-
-                job_results = scrape_all_jobs(keywords)
-                print(f"📊 Scraped Job Results: {len(job_results)}")
-
-                if job_results:
-                    job_list = "📌 Here are some jobs matching your CV:\n\n"
-                    for job in job_results[:5]:
-                        title = job.get("title", "No title")
-                        company = job.get("company", {}).get("display_name", "Unknown")
-                        location = job.get("location", {}).get("display_name", "Unknown")
-                        url = job.get("url", "#")
-                        job_list += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
-                    msg.body(job_list)
-                else:
-                    msg.body("😕 No job matches found right now. Try again later.")
-
-            except Exception as e:
-                print("❌ Error during analysis or scraping:", str(e))
-                msg.body("⚠️ There was an error analyzing your CV. Please try again later.")
-
+        try:
+            client = Client(twilio_sid, twilio_token)
+            media_sid = urllib.parse.urlsplit(media_url).path.split("/")[-1]
+            media_obj = client.messages.media(media_sid).fetch()
+            media_bytes = media_obj.content
+        except Exception as err:
+            print("❌ Twilio media fetch failed:", err)
+            msg.body("❌ Could not download your CV from WhatsApp. Please try again.")
             return str(resp)
 
-        else:
-            print(f"❌ Download failed: {response.status_code} — {response.text}")
-            msg.body("❌ Failed to download your CV. Please try again.")
-            return str(resp)
+        ext = media_type.split('/')[-1]
+        os.makedirs("cv_uploads", exist_ok=True)
+        filename = secure_filename(f"user_cv.{ext}")
+        filepath = os.path.join("cv_uploads", filename)
+
+        with open(filepath, "wb") as f:
+            f.write(media_bytes)
+
+        print(f"✅ CV saved to {filepath}")
+        msg.body("📄 CV received! Analyzing now...")
+
+        # Save metadata to DB
+        cv_record = CVUpload(filename=filename, filepath=filepath)
+        session.add(cv_record)
+        session.commit()
+
+        try:
+            text = extract_text_from_cv(filepath)
+            print("🧠 Extracted CV text preview:", text[:500])
+            keywords = extract_keywords(text, top_n=7)
+            print("🔑 Extracted Keywords:", keywords)
+
+            job_results = scrape_all_jobs(keywords)
+            print(f"📊 Scraped Job Results: {len(job_results)}")
+
+            if job_results:
+                job_list = "📌 Here are some jobs matching your CV:\n\n"
+                for job in job_results[:5]:
+                    title = job.get("title", "No title")
+                    company = job.get("company", {}).get("display_name", "Unknown")
+                    location = job.get("location", {}).get("display_name", "Unknown")
+                    url = job.get("url", "#")
+                    job_list += f"🔹 *{title}*\n📍 {company}, {location}\n🔗 {url}\n\n"
+                msg.body(job_list)
+            else:
+                msg.body("😕 No job matches found right now. Try again later.")
+
+        except Exception as e:
+            print("❌ Error during analysis or scraping:", str(e))
+            msg.body("⚠️ There was an error analyzing your CV. Please try again later.")
+
+        return str(resp)
 
     msg.body("Send 'hello' to get started or upload your CV.")
     return str(resp)
