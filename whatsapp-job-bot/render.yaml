@@ -7,8 +7,4 @@ services:
       pip install -r requirements.txt
     startCommand: |
       gunicorn app:app
-    envVars:
-      - key: TWILIO_ACCOUNT_SID
-        value: AC27986ffa3107ba2f7e3d685f5ab5a8ab
-      - key: TWILIO_AUTH_TOKEN
-        value: fd27028aa11c9b1eee5214c74eeca72d
+    
