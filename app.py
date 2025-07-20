@@ -49,6 +49,7 @@ def whatsapp_reply():
         # --- Twilio secure media download ---
         twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
         twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
+        client = Client(twilio_sid, twilio_token)
         print("TWILIO_ACCOUNT_SID:", twilio_sid)
         print("TWILIO_AUTH_TOKEN:", "✅ Loaded" if twilio_token else "❌ Missing")
 
@@ -60,25 +61,23 @@ def whatsapp_reply():
                 message_sid = path_parts[6]  
                 media_sid = path_parts[-1]  
         
-                # Initialize Twilio client
-                client = Client(twilio_sid, twilio_token)
-        
                 # Fetch the media object
                 media = client.messages(message_sid).media(media_sid).fetch()
         
-                # Construct the direct media URL (remove .json suffix)
-                media_url_authenticated = media.uri.replace(".json", "")
-                twilio_media_url = f"https://api.twilio.com{media_url_authenticated}"
+               # Correct: use .uri not .url, and remove .json
+                media_url_authenticated = f"https://api.twilio.com{media.uri.replace('.json','')}"
         
-                # Download the media content using basic auth
-                response = requests.get(twilio_media_url, auth=(twilio_sid, twilio_token))
+                # Download the media content using Basic Auth
+                response = requests.get(media_url_authenticated, auth=(twilio_sid, twilio_token))
                 response.raise_for_status()
                 media_bytes = response.content
+        
             else:
-                #publicly accessible url
+                # Publicly accessible URL (no auth needed)
                 response = requests.get(media_url)
                 response.raise_for_status()
                 media_bytes = response.content
+        
         except Exception as err:
             print("❌ Twilio media fetch failed:", err)
             msg.body("❌ Could not download your CV from WhatsApp. Please try again.")
