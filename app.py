@@ -51,7 +51,7 @@ def whatsapp_reply():
         twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
 
         try:
-            if "api.twillio.com" in media_url:
+            if "api.twilio.com" in media_url:
                 client = Client(twilio_sid, twilio_token)
                 media_sid = urllib.parse.urlsplit(media_url).path.split("/")[-1]
                 media_obj = client.messages.media(media_sid).fetch()
