@@ -3,6 +3,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
 from requests.auth import HTTPBasicAuth
 import os
+import requests
 import urllib.parse
 from werkzeug.utils import secure_filename
 from cv_parser import extract_text_from_cv, extract_keywords
@@ -20,6 +21,10 @@ def log_request():
 @app.route('/', methods=['GET'])
 def home():
     return "✅ WhatsApp job bot is running!"
+
+@app.route('/webhook', methods=['GET'])
+def webhook_status():
+    return "✅ Webhook is live and reachable! POST here with Twilio messages.", 200
 
 @app.route('/webhook', methods=['POST'])
 def whatsapp_reply():
@@ -46,10 +51,16 @@ def whatsapp_reply():
         twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
 
         try:
-            client = Client(twilio_sid, twilio_token)
-            media_sid = urllib.parse.urlsplit(media_url).path.split("/")[-1]
-            media_obj = client.messages.media(media_sid).fetch()
-            media_bytes = media_obj.content
+            if "api.twillio.com" in media_url:
+                client = Client(twilio_sid, twilio_token)
+                media_sid = urllib.parse.urlsplit(media_url).path.split("/")[-1]
+                media_obj = client.messages.media(media_sid).fetch()
+                media_bytes = media_obj.content
+            else:
+                #publicly accessible url
+                response = requests.get(media_url)
+                response.raise_for_status()
+                media_bytes = response.content
         except Exception as err:
             print("❌ Twilio media fetch failed:", err)
             msg.body("❌ Could not download your CV from WhatsApp. Please try again.")
