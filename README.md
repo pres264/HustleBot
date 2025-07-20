@@ -52,3 +52,29 @@ pip install -r requirements.txt
 # Set environment variables
 export TWILIO_ACCOUNT_SID='your_sid'
 export TWILIO_AUTH_TOKEN='your_token'
+```
+## 📲 How to Access the WhatsApp Job Bot
+
+To interact with the WhatsApp Job Bot, follow these simple steps:
+
+1. **Save the Twilio Sandbox Number**  
+   Save this number in your contacts:  
+   📞 `+14155238886` (Twilio Sandbox for WhatsApp)
+
+2. **Join the Sandbox**  
+   Open WhatsApp and send the following message to the saved number:
+   ```
+   join fighting-independent
+   ```
+   *This connects you to the sandbox environment where the bot lives.*
+
+3. **Start the Bot**  
+   Once you're successfully connected, send:
+   ```
+   hello
+   ```
+   The bot will reply with instructions on how to upload your CV.
+
+4. **Upload Your CV**  
+   Send your CV as a **PDF** or **DOCX** file.  
+   The bot will analyze your resume and return a list of job opportunities tailored to your skills.
