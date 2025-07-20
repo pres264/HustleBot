@@ -52,20 +52,25 @@ def whatsapp_reply():
 
         try:
             if "api.twilio.com" in media_url:
+                 # Extract both message SID and media SID from the URL
+                path_parts = urllib.parse.urlsplit(media_url).path.split("/")
+                message_sid = path_parts[6]  
+                media_sid = path_parts[-1]  
+        
+                # Initialize Twilio client
                 client = Client(twilio_sid, twilio_token)
-                media_sid = urllib.parse.urlsplit(media_url).path.split("/")[-1]
-                message_sid = urllib.parse.urlsplit(media_url).path.split("/")[-3]  # get the message SID from URL
-            
+        
+                # Fetch the media object
                 media = client.messages(message_sid).media(media_sid).fetch()
-            
-                # Download the media content using authenticated request
-                media_url_authenticated = media.uri.replace('.json', '')
+        
+                # Construct the direct media URL (remove .json suffix)
+                media_url_authenticated = media.uri.replace(".json", "")
                 twilio_media_url = f"https://api.twilio.com{media_url_authenticated}"
-            
+        
+                # Download the media content using basic auth
                 response = requests.get(twilio_media_url, auth=(twilio_sid, twilio_token))
                 response.raise_for_status()
                 media_bytes = response.content
-
             else:
                 #publicly accessible url
                 response = requests.get(media_url)
