@@ -54,29 +54,39 @@ def whatsapp_reply():
         print("TWILIO_AUTH_TOKEN:", "✅ Loaded" if twilio_token else "❌ Missing")
 
 
-        try:
-            if "api.twilio.com" in media_url:
-                 # Extract both message SID and media SID from the URL
-                path_parts = urllib.parse.urlsplit(media_url).path.split("/")
-                message_sid = path_parts[6]  
-                media_sid = path_parts[-1]  
+       try:
+           if "api.twilio.com" in media_url:
+               # Split the path correctly
+                path_parts = urllib.parse.urlsplit(media_url).path.strip("/").split("/")
+                
+                # Correctly identify positions
+                # Example URL: /2010-04-01/Accounts/{SID}/Messages/{MESSAGE_SID}/Media/{MEDIA_SID}
+                message_sid_index = path_parts.index("Messages") + 1
+                media_sid_index = path_parts.index("Media") + 1
         
-                # Fetch the media object
+                message_sid = path_parts[message_sid_index]
+                media_sid = path_parts[media_sid_index]
+        
+                print("✅ Extracted Message SID:", message_sid)
+                print("✅ Extracted Media SID:", media_sid)
+        
+                # Fetch media metadata using Twilio SDK
                 media = client.messages(message_sid).media(media_sid).fetch()
         
-               # Correct: use .uri not .url, and remove .json
+                # Build the authenticated URL from media.uri (not media.url)
                 media_url_authenticated = f"https://api.twilio.com{media.uri.replace('.json','')}"
         
-                # Download the media content using Basic Auth
+                # Download the media
                 response = requests.get(media_url_authenticated, auth=(twilio_sid, twilio_token))
                 response.raise_for_status()
                 media_bytes = response.content
         
             else:
-                # Publicly accessible URL (no auth needed)
+                # Fallback for public URLs
                 response = requests.get(media_url)
                 response.raise_for_status()
                 media_bytes = response.content
+
         
         except Exception as err:
             print("❌ Twilio media fetch failed:", err)
