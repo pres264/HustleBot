@@ -54,8 +54,18 @@ def whatsapp_reply():
             if "api.twilio.com" in media_url:
                 client = Client(twilio_sid, twilio_token)
                 media_sid = urllib.parse.urlsplit(media_url).path.split("/")[-1]
-                media_obj = client.messages.media(media_sid).fetch()
-                media_bytes = media_obj.content
+                message_sid = urllib.parse.urlsplit(media_url).path.split("/")[-3]  # get the message SID from URL
+            
+                media = client.messages(message_sid).media(media_sid).fetch()
+            
+                # Download the media content using authenticated request
+                media_url_authenticated = media.uri.replace('.json', '')
+                twilio_media_url = f"https://api.twilio.com{media_url_authenticated}"
+            
+                response = requests.get(twilio_media_url, auth=(twilio_sid, twilio_token))
+                response.raise_for_status()
+                media_bytes = response.content
+
             else:
                 #publicly accessible url
                 response = requests.get(media_url)
