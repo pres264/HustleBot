@@ -47,8 +47,11 @@ def whatsapp_reply():
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ]:
         # --- Twilio secure media download ---
-        twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
+        twilio_sid = "AC27986ffa3107ba2f7e3d685f5ab5a8ab"
+        twilio_token = "fd27028aa11c9b1eee5214c74eeca72d"
+        print("TWILIO_ACCOUNT_SID:", twilio_sid)
+        print("TWILIO_AUTH_TOKEN:", "✅ Loaded" if twilio_token else "❌ Missing")
+
 
         try:
             if "api.twilio.com" in media_url:
